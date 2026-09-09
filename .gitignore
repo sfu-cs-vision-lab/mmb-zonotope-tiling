@@ -1,0 +1,50 @@
+# MATLAB
+*.asv
+*.m~
+*.autosave
+*.mex*
+*.mlappinstall
+*.mltbx
+*.p
+codeCoverageReport/
+helpsearch-*/
+slprj/
+.buildtool/
+
+# Build reports (badge JSONs, if added, stay tracked)
+reports/*.xml
+reports/*.html
+
+# Generated inputs and results
+runs_output/
+generators_*.txt
+mmb_*.txt
+results/
+gate_reports/
+.checks/
+*.out
+*.err
+
+# Working state written by the pipeline
+.staging.*
+.prep.*/
+.example.*/
+.determ.*/
+.scratch/
+
+# CUDA build product
+cuda/mmb_exact
+
+# OS and editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# Committed test fixtures are exempt from the patterns above
+!tests/fixtures/
+!tests/fixtures/*
+
+# MATLAB Drive marker
+.MATLABDriveTag

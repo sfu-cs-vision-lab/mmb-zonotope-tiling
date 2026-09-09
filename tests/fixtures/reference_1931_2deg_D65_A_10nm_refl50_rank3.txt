@@ -1,0 +1,6 @@
+% Reference body. The second mechanism is the first, so the body is one
+% point, the target z0 of the generators file.
+% Input: generators_1931_2deg_D65_A_10nm_refl50_rank3.txt
+% payload_sha256=c6e94447133eb308e0d38e3785e93a5fda129e4311ce9d7c31695074f825199e
+% rank=3
+47.521125526655069 50.000000000000007 54.430523339603148

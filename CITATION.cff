@@ -1,0 +1,55 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite the extended abstract under preferred-citation. The archived datasets have their own DOI, listed under references."
+title: "Exact Metamer Mismatch Body Computation by Zonotope Tiling"
+abstract: "MATLAB, CUDA and Slurm code that computes exact metamer mismatch bodies for a discretized spectral problem by tiling the six-dimensional double object-color solid and slicing it at a target color."
+type: software
+version: 1.0.0
+authors:
+  - given-names: Alexander G.
+    family-names: Forsythe
+    orcid: "https://orcid.org/0000-0002-5185-0705"
+    affiliation: Simon Fraser University
+  - given-names: Brian
+    family-names: Funt
+    orcid: "https://orcid.org/0000-0003-3525-9197"
+    affiliation: Simon Fraser University
+repository-code: "https://github.com/sfu-cs-vision-lab/mmb-zonotope-tiling"
+license: AGPL-3.0-or-later
+keywords:
+  - metamerism
+  - color science
+  - metamer mismatch body
+  - zonotope
+  - CUDA
+preferred-citation:
+  type: generic
+  status: abstract
+  title: "What's the Right Answer Anyway? Exact Computation of Metamer Mismatch Bodies via Zonotope Tiling"
+  year: 2026
+  authors:
+    - given-names: Alexander G.
+      family-names: Forsythe
+      orcid: "https://orcid.org/0000-0002-5185-0705"
+      affiliation: Simon Fraser University
+    - given-names: Brian
+      family-names: Funt
+      orcid: "https://orcid.org/0000-0003-3525-9197"
+      affiliation: Simon Fraser University
+  notes: "Extended abstract accepted for presentation at the 34th Color and Imaging Conference (CIC34), Barcelona, Spain."
+references:
+  - type: data
+    title: "Exact Discrete Metamer Mismatch Bodies from Zonotope Tiling"
+    year: 2026
+    doi: "10.5281/zenodo.22683533"
+    license: CC-BY-SA-4.0
+    publisher:
+      name: Zenodo
+    authors:
+      - given-names: Alexander G.
+        family-names: Forsythe
+        orcid: "https://orcid.org/0000-0002-5185-0705"
+        affiliation: Simon Fraser University
+      - given-names: Brian
+        family-names: Funt
+        orcid: "https://orcid.org/0000-0003-3525-9197"
+        affiliation: Simon Fraser University

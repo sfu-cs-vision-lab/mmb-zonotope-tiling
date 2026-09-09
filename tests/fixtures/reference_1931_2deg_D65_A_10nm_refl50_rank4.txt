@@ -1,0 +1,9 @@
+% Reference body, computed in MATLAB on the CPU by a separate implementation
+% of the same tiling, run in the 4-D span of the sensors. The tiling gives
+% 94 slice vertices. The body is a segment along channel 3 of the second
+% mechanism, and these are its 2 ends.
+% Input: generators_1931_2deg_D65_A_10nm_refl50_rank4.txt
+% payload_sha256=0a9901e50b2c51803d7c7f3ce97c79b320d1511cc9925a26a2ad98d254f3715a
+% rank=4
+47.521125526655126 50 14.676076289291052
+47.521125526655119 50.000000000000007 20.90542364884648
