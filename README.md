@@ -13,8 +13,6 @@ The MMB is computed by tiling the six-dimensional double object-color solid
 plane, enumerating the cross-section vertices on a GPU and taking the
 convex hull of the result. The enumeration is exact for the discretized
 problem defined by the generators file. Coordinates are floating point.
-When the two mechanisms share a channel, the MMB is flat, and the pipeline
-reports it with volume 0 and its distinct points.
 
 The [Zenodo data archive](https://doi.org/10.5281/zenodo.22683533) contains
 345 precomputed datasets. This repository provides the computation and
@@ -39,9 +37,9 @@ the GPU. The job-management scripts use Slurm.
 
 ## Terminology
 
-- **collection**: the full set of MMBs defined by `runs/dataset_ids.txt`.
-- **dataset**: one MMB, meaning its generators file and its results.
-- **dataset_id**: the identifier of one dataset, for example
+- The collection is the full set of MMBs defined by `runs/dataset_ids.txt`.
+- A dataset is one MMB, meaning its generators file and its results.
+- The `dataset_id` is the identifier of one dataset, for example
   `1931_2deg_D65_A_10nm_refl50`. It encodes the observer, the two
   illuminants, the wavelength spacing and the flat-reflectance level.
 
@@ -84,21 +82,11 @@ for hull construction depends on the size of the existing kernel output.
 - `bash` 4.2 or newer, `python3` 3.8 or newer, `awk` and `sha256sum` or
   `shasum`.
 
-`python3` does two small jobs. `mmb_run.sh` computes the tile count C(n, 6)
-with `math.comb` and estimates a GPU walltime from it. `tools/slurm_jobs.sh`
-hashes the resolved output directory into a tag, so the launcher recognizes
-its own Slurm jobs and leaves other jobs alone. `math.comb` arrived in Python
-3.8, which sets the minimum.
+`python3` computes the tile count and hashes the output path for the job tag.
+`awk` reads single values out of the text files.
 
-`awk` reads single values out of text. It reads the band count at the top of
-a generators file, the vertex and face counts and hull volume from a summary,
-the chunk count from a result header and row counts in the result CSVs. The
-launcher, the job scripts and the checking tools in `tools/` all use it.
-
-Neither is needed for the MATLAB work described above. They belong to the
-shell and HPC workflow.
-
-Tested releases are in [Testing](#testing).
+`tools/verify_chunk.sh` and `tools/check_dataset_files.sh` need only `awk` and
+`sha256sum` or `shasum`, with no MATLAB, CUDA or Slurm.
 
 ## Configure your HPC site
 
@@ -117,9 +105,6 @@ MMB_MODULES_MATLAB="StdEnv/2023 matlab/2024b.1"
 MMB_GPU_ARCH=sm_90                    # CUDA target architecture
 MMB_OUTPUT_ROOT=runs_output           # results location. Point at scratch
 ```
-
-The shipped values are the ones this workflow was tested on, the Fir
-cluster of the Digital Research Alliance of Canada. They are an example.
 
 `--fmad=false` in `cuda/Makefile` is not configurable. The published
 numerical results depend on it.
@@ -184,6 +169,11 @@ Re-running is the recovery path. Completed datasets are skipped, datasets
 in flight are left alone and missing chunks or failed hulls are resubmitted
 by index.
 
+Job status and cancellation apply only to jobs submitted for the configured
+output directory, so separate output directories can run the same dataset.
+If the queue cannot be read, status and recovery stop before treating any
+dataset as inactive.
+
 | Flag | Effect |
 |------|--------|
 | `--status` | Report every dataset under the output root |
@@ -217,36 +207,9 @@ directory. Running one in MATLAB prepares inputs only. Passing it to
 | `runs_observer_comparison.m` | D65 paired with A, D50 and FL11 at 1 nm and 50% reflectance, for all six observers |
 | `runs_all_datasets.m` | Every dataset listed in `runs/dataset_ids.txt` |
 
-To regenerate the archived collection, use the driver rather than
-`mmb_run.sh` directly. It bounds how many datasets are in flight at once,
-which bounds peak scratch usage:
-
-```sh
-export STORED_ROOT=/path/to/mmb-data/data
-bash tools/regenerate_datasets.sh preflight
-bash tools/regenerate_datasets.sh submit --max-datasets 8
-bash tools/regenerate_datasets.sh status
-bash tools/regenerate_datasets.sh validate
-```
-
-`preflight` checks the CIE input hashes, the toolchain and the kernel
-build, and reports which release checks have passed for the current source.
-`submit` refuses until all four have passed. Run them first:
-
-```sh
-bash tests/hpc/test_example.sh                      # GPU node
-bash tests/hpc/test_determinism.sh                  # GPU node
-bash tools/regenerate_datasets.sh check-inputs  # login node
-bash tests/hpc/test_interruption.sh                 # login node
-```
-
-Set `STORED_ROOT` to the `data` directory from the extracted Zenodo data
-archive. The input comparison requires all 345 generators files. See
-[HPC_GUIDE.md](docs/HPC_GUIDE.md) for the full procedure.
-
-These four checks are required by the collection driver. Ordinary runs
-through `mmb_run.sh` still check input identity, chunk completeness and
-hull outputs. Run `validateDataset` afterward for reflectance feasibility.
+To recompute the archived collection, use `tools/regenerate_datasets.sh`. The
+procedure, including the four checks it requires first, is in
+[HPC_GUIDE.md](docs/HPC_GUIDE.md).
 
 ### Writing your own run definition
 
@@ -258,12 +221,6 @@ prepareGenerators("1931_2deg", "D65", ["A", "FL11"], ...
 `help prepareGenerators` lists the options, including explicit target
 tristimulus values, a reflectance spectrum instead of a flat level, custom
 illuminant CSVs and batch inputs.
-
-A reflectance spectrum is interpolated onto the wavelengths the generators
-retain, then averaged within each band to one reflectance per band. The
-target is those band reflectances applied to the normalized generators, so a
-constant spectrum gives the same target as the equal `Refl` value. The
-spectrum must cover the retained range, and is never extrapolated.
 
 ## How results are checked
 
@@ -289,18 +246,9 @@ kernel output. Validation then checks the resulting hull.
    compares volumes for complementary reflectance levels and writes
    `collection_certificate.json` and `manifest_gated.txt`.
 
-A certificate records the source used for its checks. When the checks run
-in this project's Git checkout, that is the commit. In an extracted release
-it is the packaged source record. See `tools/source_id.sh`. Two supplied
-certificates, those checked at every boundary vertex, were written by the
-code of this release and name its commit. The others keep the source
-identifiers recorded when they were written. See
-`docs/VALIDATION_FORMAT.md`.
-
-Validation does not establish that every listed vertex is extreme or
-that the enumeration is complete. `docs/VALIDATION.md` says what
-each check does and does not cover, and `docs/VALIDATION_FORMAT.md`
-documents the certificate fields.
+[VALIDATION.md](docs/VALIDATION.md) says what each check does and does not
+cover, and [VALIDATION_FORMAT.md](docs/VALIDATION_FORMAT.md) documents the
+certificate fields.
 
 The `validation/` directory holds a comparison of the released CUDA source
 with the source used for the calculation and the GPU timing of dataset_id
@@ -338,10 +286,13 @@ Results land in `<output root>/_validation/`.
 | `cfb_10deg` | CIE 170-2 cone-fundamental-based 10-degree | CIE 170-2:2015 |
 | `lms_2deg` | LMS cone fundamentals, 2-degree | CIE 170-2:2015 Table 10.2 |
 | `lms_10deg` | LMS cone fundamentals, 10-degree | CIE 170-2:2015 Table 10.5 |
-| `<file>.csv` | Custom observer, four columns. See below |
+| `<file>.csv` | Custom observer with four columns | Your file |
 
 XYZ-family observers are normalized so that a perfect diffuser has Y = 100
 under each illuminant. LMS observers keep the unit-peak cone fundamentals.
+
+When the two mechanisms share a channel, the MMB is flat, and the pipeline
+reports it with volume 0 and its distinct points.
 
 ### Custom observer
 
@@ -360,22 +311,12 @@ Wavelengths must increase strictly, with no repeats, and every value must be
 finite. The three channels may be negative, since color-matching functions
 are signed. The file must overlap the wavelength range you ask for.
 
-A custom observer needs `ObserverNorm`, because nothing about an arbitrary
-file says what its units are:
+A custom observer needs `ObserverNorm`.
 
 | `ObserverNorm` | Effect |
 |----------------|--------|
 | `"white_y100"` | Scale each illuminant so the second channel of a perfect reflector integrates to 100. Use this for XYZ-like color-matching functions |
 | `"as_supplied"` | Use the channel values unchanged, with no white anchor |
-
-The dataset identifier comes from the file base name, made into a valid
-identifier, so a path never appears in a dataset name. `my camera.csv`
-becomes `myCamera`. The generators header records the source path, its
-SHA-256 and the normalization. No DOI, CIE metadata or license is claimed
-for a file you supply.
-
-A custom observer fills the same single observer role as a named one. It does
-not let you use a different observer for each illuminant.
 
 Prepare inputs in MATLAB:
 
@@ -386,25 +327,7 @@ prepareGenerators("my_camera.csv", "D65", "A", ...
     OutputDir="runs_output/my_camera_D65_A_10nm_refl50");
 ```
 
-That writes a generators file and computes nothing else. To compute the body
-on a cluster, put the same call in a run definition under `runs/`, then hand
-it to the launcher. Keep the CSV in the repository root or beside the run
-definition, so it resolves when the launcher runs MATLAB from its private
-preparation directory:
-
-```matlab
-% runs/runs_my_camera.m
-prepareGenerators("my_camera.csv", "D65", "A", ...
-    Spacing=10, Refl=0.5, ObserverNorm="as_supplied");
-```
-
-```sh
-bash mmb_run.sh runs/runs_my_camera.m
-```
-
-The launcher prepares the inputs, then submits the GPU and hull jobs. See
-[Computing the collection on a cluster](docs/HPC_GUIDE.md) for the cluster
-setup that has to be in place first.
+`help prepareGenerators` has the details.
 
 ## Supported illuminants
 
@@ -436,37 +359,6 @@ counting only complete bins. Other observers can have a shorter range.
 
 The largest band count is 410, set by `MAX_N` in `cuda/mmb_exact_cuda.cu`.
 A generators file with more bands than that is rejected rather than computed.
-
-## Which tool to use
-
-| Tool | Purpose | Where it runs |
-|---|---|---|
-| `examples/GettingStarted.m` | Load, plot and validate a supplied MMB | MATLAB, with Optimization Toolbox |
-| `src/*.m` | Prepare inputs, build hulls and read or validate results | MATLAB on a desktop or cluster. Reflectance validation needs Optimization Toolbox |
-| `runs/*.m` | Define conditions and prepare input files | MATLAB. These scripts do not submit jobs themselves |
-| `mmb_run.sh` | Generate inputs, submit jobs, show status and resume work | HPC login node, with GPU and CPU jobs submitted to Slurm |
-| `tools/regenerate_datasets.sh` | Manage computation of the published collection | HPC for job management. See the input-check note below |
-| `slurm/single_gpu.sh` and `slurm/gpu_chunk.sh` | Compute candidate vertices | HPC GPU jobs called by the launcher |
-| `slurm/hull_job.sh` and `slurm/validate_job.sh` | Build hulls and validate results in MATLAB | HPC CPU jobs |
-| `tools/slurm_jobs.sh` | Match queued jobs to the current output directory | HPC shell helper used by the launcher |
-| `tools/env.sh` and `tools/check_env.sh` | Load and check the configured cluster tools | HPC terminal |
-| `tests/hpc/test_example.sh` and `tests/hpc/test_determinism.sh` | Compute and check small MMBs on a GPU | An allocated HPC GPU node |
-| `tests/hpc/test_interruption.sh` | Check cancellation and recovery of GPU jobs | HPC login node. Submits and cancels real test jobs |
-| `tools/copy_generators.sh` | Copy supplied generators into a new output directory | Local or HPC terminal, with the data archive extracted |
-| `tools/check_data_hashes.sh` | Check the CIE input files | Local or HPC terminal, with the files available |
-| `tools/verify_chunk.sh` and `tools/check_dataset_files.sh` | Inspect existing inputs and output files | Local or HPC terminal, with the files available |
-| `tools/source_id.sh` | Report the identity of the source tree | Local or HPC terminal |
-| `tools/find_low_vertex_datasets.sh` | Flag unusually low vertex counts for inspection | Local or HPC terminal, with the results available |
-
-The file-inspection commands require shell utilities, not MATLAB, CUDA
-or Slurm. The collection driver's `check-inputs` command uses MATLAB to
-regenerate input files and compare them with the supplied data. It can
-run without a GPU or scheduler and does not compute MMBs.
-
-Job status and cancellation apply only to jobs submitted for the configured
-output directory, so separate output directories can run the same dataset.
-If the queue cannot be read, the requested status or recovery operation
-stops before treating a dataset as inactive.
 
 ## Project structure
 
@@ -504,22 +396,23 @@ mmb-zonotope-tiling/
 
 ## Testing
 
-**MATLAB tests:** run in MATLAB with Optimization Toolbox. No HPC is needed.
+The MATLAB tests run in MATLAB with Optimization Toolbox. No HPC is needed.
 
 ```matlab
 buildtool          % static analysis, then unit tests
 ```
 
-**Shell tests:** run in a local terminal with the required shell utilities.
+The shell tests run in a local terminal with the required shell utilities.
 They simulate the cluster commands and do not submit jobs or run CUDA.
 
 ```sh
 for t in tests/shell/*.sh; do bash "$t"; done
 ```
 
-**HPC tests:** `tests/hpc/test_example.sh`, `tests/hpc/test_determinism.sh` and
+The HPC tests `tests/hpc/test_example.sh`, `tests/hpc/test_determinism.sh` and
 `tests/hpc/test_interruption.sh` perform real GPU computations. Their required
-node types are listed above. See [HPC_GUIDE.md](docs/HPC_GUIDE.md) for the commands.
+node types are listed in [VALIDATION.md](docs/VALIDATION.md). See
+[HPC_GUIDE.md](docs/HPC_GUIDE.md) for the commands.
 
 The MATLAB unit tests use the repository's supplied test data.
 `validateAllMMBTest` checks completed results and skips itself when no output
@@ -546,9 +439,8 @@ The generated MMB datasets in the Zenodo archive are licensed under
 
 ## Citation
 
-The presentation, the archived dataset and this software are separate
-works. Cite whichever you used. The Zenodo DOI identifies the archived
-dataset. It is not a DOI for the presentation or for the software.
+Cite the abstract for the method, the Zenodo DOI for the data and the
+software entry for the code.
 
 ### Presentation and extended abstract
 
@@ -585,7 +477,7 @@ under CC BY-SA 4.0.
 
 ### Software
 
-Version 1.0.0 of this repository, under AGPL-3.0-or-later.
+Release 1.0.0 of the software, under AGPL-3.0-or-later.
 
 ```bibtex
 @software{forsythe2026mmbsoftware,
