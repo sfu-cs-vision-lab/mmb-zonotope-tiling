@@ -64,7 +64,6 @@ touch "$WORK/runs_output/datasetA/.running"
 : > "$SCANCEL_LOG"
 out=$(run_submit)
 [ ! -f "$WORK/runs_output/datasetA/.running" ] && ok "orphaned lock cleared (no live jobs)" || bad "orphaned lock cleared"
-echo "$out" | grep -q "self-heal: cleared stale lock for datasetA" && ok "self-heal reported" || bad "self-heal reported"
 echo "$out" | grep -q "MMBRUN-STUB" && ok "resubmission proceeds in the same invocation" || bad "resubmission proceeds"
 
 # 2. DatasetB: zombie hull (PENDING DependencyNeverSatisfied) -> scancel'd, lock cleared

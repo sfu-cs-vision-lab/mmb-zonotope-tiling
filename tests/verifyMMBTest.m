@@ -136,7 +136,8 @@ classdef verifyMMBTest < matlab.unittest.TestCase
             fprintf(fid, "%.17g,%.17g,%.17g\n", V'); fclose(fid);
             rep = verifyMMB(resultsDir, genFile, Sample=8, Verbose=false);
             testCase.verifyFalse(rep.pass);
-            testCase.verifyTrue(any(contains(rep.reasons, "Sensor rank 5 allows at most 2")));
+            testCase.verifyGreaterThan(rep.volume.dimension, 2);
+            testCase.verifyTrue(any(startsWith(rep.reasons, "VOLUME: points span")));
         end
 
         function rankBelowSixWithoutFlatLineFails(testCase)
@@ -146,7 +147,7 @@ classdef verifyMMBTest < matlab.unittest.TestCase
             writelines(lines(~startsWith(lines, "Flat body:")), sPath);
             rep = verifyMMB(resultsDir, genFile, Sample=8, Verbose=false);
             testCase.verifyFalse(rep.pass);
-            testCase.verifyTrue(any(contains(rep.reasons, "no 'Flat body:' line")));
+            testCase.verifyTrue(any(startsWith(rep.reasons, "VOLUME")));
         end
 
         function countMismatchFails(testCase)
@@ -162,9 +163,66 @@ classdef verifyMMBTest < matlab.unittest.TestCase
             testCase.verifyFalse(rep.pass);
             testCase.verifyTrue(any(contains(rep.reasons, "INTEGRITY")));
         end
+
+        function summaryZ0MismatchFails(testCase)
+            genFile = testCase.copyAnchorResult();
+            sPath = fullfile(testCase.TmpDir, "mmb_" + testCase.DatasetId + "_summary.txt");
+            sTxt = regexprep(string(fileread(sPath)), "% z0 = \[[^\]]+\]", ...
+                "% z0 = [1.000000, 2.000000, 3.000000]");
+            fid = fopen(sPath, "w"); fprintf(fid, "%s", sTxt); fclose(fid);
+            rep = verifyMMB(testCase.TmpDir, genFile, Sample=8, Verbose=false);
+            testCase.verifyFalse(rep.pass);
+            testCase.verifyGreaterThan(rep.provenance.z0RelDiff, 1e-5);
+            testCase.verifyTrue(any(startsWith(rep.reasons, "PROVENANCE")));
+        end
+
+        function faceIndexOutOfRangeFails(testCase)
+            genFile = testCase.copyAnchorResult();
+            s = testCase.DatasetId;
+            V = readmatrix(fullfile(testCase.TmpDir, "mmb_" + s + "_vertices.csv"), FileType="text");
+            fPath = fullfile(testCase.TmpDir, "mmb_" + s + "_faces.csv");
+            F = readmatrix(fPath, FileType="text");
+            F(1, 1) = size(V, 1) + 1;
+            writematrix(F, fPath, FileType="text");
+            rep = verifyMMB(testCase.TmpDir, genFile, Sample=8, Verbose=false);
+            testCase.verifyFalse(rep.pass);
+            testCase.verifyTrue(any(startsWith(rep.reasons, "INTEGRITY")));
+        end
+
+        function nonFiniteVertexFails(testCase)
+            genFile = testCase.copyAnchorResult();
+            vPath = fullfile(testCase.TmpDir, "mmb_" + testCase.DatasetId + "_vertices.csv");
+            V = readmatrix(vPath, FileType="text");
+            V(2, 1) = NaN;
+            fid = fopen(vPath, "w"); fprintf(fid, "%.17g,%.17g,%.17g\n", V'); fclose(fid);
+            rep = verifyMMB(testCase.TmpDir, genFile, Sample=8, Verbose=false);
+            testCase.verifyFalse(rep.pass);
+            testCase.verifyTrue(any(startsWith(rep.reasons, "INTEGRITY")));
+        end
+
+        function sameSeedSamplesSameVertices(testCase)
+            genFile = fullfile(testCase.FixDir, "generators_" + testCase.DatasetId + ".txt");
+            % A different global random state before each call must not
+            % change the sample.
+            rng(1);
+            a = verifyMMB(testCase.FixDir, genFile, Sample=16, Seed=5, Verbose=false);
+            rng(2);
+            b = verifyMMB(testCase.FixDir, genFile, Sample=16, Seed=5, Verbose=false);
+            testCase.verifyEqual(rmfield(b.lp, "seconds"), rmfield(a.lp, "seconds"));
+        end
     end
 
     methods (Access = private)
+        function genFile = copyAnchorResult(testCase)
+            % Copy the anchor fixture's result files into TmpDir and return
+            % the path of its generators file.
+            s = testCase.DatasetId;
+            for f = ["_vertices.csv", "_faces.csv", "_summary.txt"]
+                copyfile(fullfile(testCase.FixDir, "mmb_" + s + f), testCase.TmpDir);
+            end
+            genFile = fullfile(testCase.FixDir, "generators_" + s + ".txt");
+        end
+
         function [resultsDir, genFile] = flatResult(testCase, sensorRank)
             % FLATRESULT  Hull of the rank 5, 4 or 3 reference body
             %

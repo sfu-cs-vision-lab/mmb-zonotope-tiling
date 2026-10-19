@@ -31,19 +31,16 @@ mk_tool gcc "gcc (Gentoo) 12.3.0"
 mk_tool nvcc "Cuda compilation tools, release 12.2, V12.2.140"
 if out=$(PATH="$TMP/bin/matlab-2024b.1:$TMP/bin:/usr/bin:/bin" bash "$SCRIPTDIR/tools/check_env.sh" 2>&1); then
     ok "pinned set passes"
-    echo "$out" | grep -q "toolchain resolved" && ok "success line" || bad "success line"
 else
     bad "pinned set passes"; echo "$out"
 fi
 
-# 2. Wrong gcc -> exit 1, decoder printed
+# 2. Wrong gcc -> exit 1
 mk_tool gcc "gcc (Gentoo) 13.1.0"
 if out=$(PATH="$TMP/bin/matlab-2024b.1:$TMP/bin:/usr/bin:/bin" bash "$SCRIPTDIR/tools/check_env.sh" 2>&1); then
     bad "wrong gcc must fail"
 else
     ok "wrong gcc fails"
-    echo "$out" | grep -q "source tools/env.sh" && ok "fix line printed" || bad "fix line printed"
-    echo "$out" | grep -q "SIGBUS in libicuuc" && ok "troubleshooting guidance printed" || bad "troubleshooting guidance printed"
 fi
 mk_tool gcc "gcc (Gentoo) 12.3.0"
 

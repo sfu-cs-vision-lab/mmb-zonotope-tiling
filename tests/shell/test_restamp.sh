@@ -47,7 +47,7 @@ git -C "$WORK" add -A && git -C "$WORK" commit -qm kernel
 out=$(run_restamp)
 [ "$(echo "$out" | grep -c "RE-RUN")" -eq 3 ] && ok "kernel diff refuses the three kernel checks" || { bad "kernel refusals"; echo "$out"; }
 echo "$out" | grep -q "cuda/mmb_exact_cuda.cu" && ok "refusal names the checked file" || bad "refusal names file"
-echo "$out" | grep -A1 "RESTAMP" | grep -q "check-inputs" || echo "$out" | grep "RESTAMP" | grep -q "check-inputs" && ok "check-inputs restamps (cuda is not among its inputs)" || bad "check-inputs restamps"
+echo "$out" | grep "RESTAMP" | grep -q "check-inputs" && ok "check-inputs restamps (cuda is not among its inputs)" || bad "check-inputs restamps"
 
 # 3. --force records a reasoned override for a refused check
 stamp_all "$HEAD1"

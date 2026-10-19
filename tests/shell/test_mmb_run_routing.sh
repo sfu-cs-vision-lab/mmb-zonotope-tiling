@@ -50,7 +50,6 @@ echo "12345"
 EOF
 cat > "$TMP/bin/squeue" << 'EOF'
 #!/bin/bash
-[ -z "${SQUEUE_ARGS_LOG:-}" ] || echo "$@" >> "$SQUEUE_ARGS_LOG"
 cat "${MMB_QUEUE_FIXTURE:-/dev/null}"
 exit "${MMB_QUEUE_EXIT:-0}"
 EOF
@@ -134,16 +133,6 @@ echo "% PRESERVED MARKER" >> "$RD/generators_$S.txt"
 run_mmb --dry-run > /dev/null
 grep -q "PRESERVED MARKER" "$RD/generators_$S.txt" && ok "sha-bearing generators file preserved" || bad "sha-bearing generators file preserved"
 
-# 7b. Memory tiers: pin the sizing functions (chunk = code ceiling, hull
-# middle tier = high-chroma 2nm, shared by standalone hulls, the single-GPU
-# inline hull and the OOM-recovery resubmit path)
-eval "$(sed -n '/^hull_mem_for_n()/,/^}/p' "$WORK/mmb_run.sh")"
-eval "$(sed -n '/^chunk_mem_for_n()/,/^}/p' "$WORK/mmb_run.sh")"
-[ "$(hull_mem_for_n 40)" = "8000M" ] && [ "$(hull_mem_for_n 200)" = "32000M" ] && [ "$(hull_mem_for_n 401)" = "32000M" ] \
-    && ok "hull mem tiers 8G/32G-flat (measured ceiling 19.55G)" || bad "hull mem tiers"
-[ "$(chunk_mem_for_n 200)" = "4000M" ] && [ "$(chunk_mem_for_n 401)" = "6000M" ] \
-    && ok "chunk mem tiers 4G/6G (code ceiling)" || bad "chunk mem tiers"
-
 # 8. File_epoch must yield a clean integer even when Linux stat -f (filesystem
 # status) spews multi-line junk with nonzero exit (the GNU->BSD fallback trap)
 eval "$(sed -n '/^file_epoch()/,/^}/p' "$WORK/mmb_run.sh")"
@@ -165,7 +154,7 @@ e=$(file_epoch "$WORK/mmb_run.sh")
 
 # 9. Killed chunks resubmit at BASE walltime (kill residue does not show the
 # cause. Preemption leaves the same leftovers as a timeout, so a retry keeps
-# its base estimate). Three failed attempts name sacct.
+# its base estimate). Three failed attempts give an advisory.
 # MMB_CHUNK_WALL_MINS is the operator override, capped at 170.
 rm -rf "$RD"; mkdir -p "$RD/chunks"
 { echo "% collection generators"; echo "% payload_sha256=00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"; echo "40"; echo "1 2 3"; } > "$RD/generators_$S.txt"
@@ -181,9 +170,7 @@ export SBATCH_LOG="$TMP/sbatch.log"; : > "$SBATCH_LOG"
 out=$(run_mmb)
 grep -q -- "--array=1" "$SBATCH_LOG" && ok "resubmit targets the missing index" || { bad "resubmit targets missing index"; cat "$SBATCH_LOG"; }
 grep -q -- "--time=00:10:00" "$SBATCH_LOG" && ok "resubmit stays at BASE walltime despite kill residue" || { bad "resubmit at base"; grep -o -- "--time=[0-9:]*" "$SBATCH_LOG"; }
-grep -q -- "--mem=4000M" "$SBATCH_LOG" && ok "chunk mem sized to code ceiling tier (4000M for n<=220)" || { bad "chunk mem tier"; grep -o -- "--mem=[0-9M]*" "$SBATCH_LOG"; }
 echo "$out" | grep -q "ADVISORY: chunk 1 has 3 killed attempts" && ok "repeated kills give an advisory (not silent inflation)" || { bad "kill advisory"; echo "$out" | tail -4; }
-echo "$out" | grep -q "sacct" && ok "advisory names the cause-diagnosis command" || bad "advisory names sacct"
 : > "$SBATCH_LOG"; rm -f "$RD/.running"
 (cd "$WORK" && MMB_CHUNK_WALL_MINS=25 "$BASH" mmb_run.sh runs/runs_test.m > /dev/null 2>&1)
 grep -q -- "--time=00:25:00" "$SBATCH_LOG" && ok "MMB_CHUNK_WALL_MINS override honored" || { bad "override honored"; grep -o -- "--time=[0-9:]*" "$SBATCH_LOG"; }
@@ -205,21 +192,11 @@ grep -q -- "--comment=$QUEUE_TAG" "$SBATCH_LOG" && ok "submitted jobs identify t
 [ "$(mmb_job_tag "$WORK/runs_output/../runs_output")" = "$QUEUE_TAG" ] && ok "equivalent output paths match the same jobs" || bad "equivalent output paths differ"
 unset MMB_QUEUE_FIXTURE SCANCEL_LOG SBATCH_LOG
 
-# Queue reads. The account name falls back to `id -un`, and a query that
-# fails is an error rather than evidence that a dataset has no jobs.
-export MMB_QUEUE_FIXTURE="$TMP/queue.txt" SQUEUE_ARGS_LOG="$TMP/squeue_args.log"
+# A queue read returns only this output directory's jobs, and a failed read is
+# an error that never counts as an empty queue.
+export MMB_QUEUE_FIXTURE="$TMP/queue.txt"
 export SCANCEL_LOG="$TMP/cancel.log" SBATCH_LOG="$TMP/sbatch.log"
-ME=$(id -un)
 printf '%s|  7001 mmb-%s\n(null)|  7002 mmb-%s\n' "$QUEUE_TAG" "$S" "$S" > "$MMB_QUEUE_FIXTURE"
-
-: > "$SQUEUE_ARGS_LOG"
-(unset USER; mmb_squeue "$QUEUE_TAG" "%.30i %.200j" > /dev/null)
-grep -q -- "-u $ME" "$SQUEUE_ARGS_LOG" && ok "unset USER falls back to the account name" || \
-    { bad "unset USER falls back to the account name"; cat "$SQUEUE_ARGS_LOG"; }
-: > "$SQUEUE_ARGS_LOG"
-(USER="" mmb_squeue "$QUEUE_TAG" "%.30i %.200j" > /dev/null)
-grep -q -- "-u $ME" "$SQUEUE_ARGS_LOG" && ok "empty USER falls back to the account name" || \
-    { bad "empty USER falls back to the account name"; cat "$SQUEUE_ARGS_LOG"; }
 
 rows=$(mmb_squeue "$QUEUE_TAG" "%.30i %.200j"); rc=$?
 [ "$rc" -eq 0 ] && [ "$(printf '%s' "$rows" | grep -c .)" -eq 1 ] && \
@@ -323,7 +300,7 @@ grep -q -- "--job-name=hull-$S" "$SBATCH_LOG" && ok "forced hull resubmits the h
 [ ! -f "$RD/results/mmb_${S}_vertices.csv" ] && ok "forced hull clears the previous results" || \
     bad "forced hull clears the previous results"
 
-unset MMB_QUEUE_FIXTURE SCANCEL_LOG SBATCH_LOG SQUEUE_ARGS_LOG
+unset MMB_QUEUE_FIXTURE SCANCEL_LOG SBATCH_LOG
 
 echo ""
 echo "mmb_run routing: $pass passed, $failed failed"

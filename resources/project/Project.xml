@@ -470,13 +470,6 @@
                     </Category>
                 </Info>
             </File>
-            <File Location="validateMMBTest.m">
-                <Info>
-                    <Category UUID="FileClassCategory">
-                        <Label UUID="test"/>
-                    </Category>
-                </Info>
-            </File>
             <File Location="validationTest.m">
                 <Info>
                     <Category UUID="FileClassCategory">

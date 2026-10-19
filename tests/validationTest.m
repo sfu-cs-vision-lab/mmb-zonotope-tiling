@@ -3,8 +3,8 @@ classdef validationTest < matlab.unittest.TestCase
 % readValidationReport.
 %
 %   Covers certificate contents, certificate reuse and staleness, the
-%   generation-identity check, collection completeness and reading both
-%   certificate field layouts.
+%   generation-identity check, collection completeness, the complementarity
+%   check and reading both certificate field layouts.
 %
 %   Run:
 %       results = runtests("validationTest");
@@ -46,7 +46,7 @@ classdef validationTest < matlab.unittest.TestCase
             testCase.verifyEqual(string(rep.result), "PASS");
             gj = fullfile(rd, "results", "mmb_" + testCase.DatasetId + "_gate.json");
             testCase.verifyTrue(isfile(gj));
-            j = jsondecode(fileread(gj));
+            j = readValidationReport(gj);
             testCase.verifyEqual(string(j.schema), "mmb-dataset-report/2");
             testCase.verifyEqual(string(j.dataset_id), testCase.DatasetId);
             testCase.verifyGreaterThan(strlength(string(j.provenance.meta.source_id)), 0);
@@ -87,6 +87,31 @@ classdef validationTest < matlab.unittest.TestCase
             m = string(fileread(fullfile(outDir, "manifest_gated.txt")));
             testCase.verifySubstring(m, "=== " + testCase.DatasetId + " ===");
             testCase.verifySubstring(m, "vertices_sha256:");
+            % The certificate reads back with the names docs/VALIDATION_FORMAT.md documents.
+            r = readValidationReport(fullfile(outDir, "collection_certificate.json"));
+            testCase.verifyEqual(string(r.schema), "mmb-collection-certificate/1");
+            testCase.verifyEqual(r.datasets_expected, 1);
+            testCase.verifyEqual(r.datasets_pass, 1);
+            testCase.verifyEqual(r.datasets_fail, 0);
+            testCase.verifyEmpty(r.failing_datasets);
+            testCase.verifyEqual(strlength(string(r.dataset_ids_file_sha256)), 64);
+        end
+
+        function complementaryVolumesMustAgree(testCase)
+            ids = ["pair_refl10"; "pair_refl90"];
+            writelines(ids, testCase.DatasetIdsFile);
+            testCase.writePassingCertificate(ids(1), 2);
+            testCase.writePassingCertificate(ids(2), 2);
+            cert = validateCollection(testCase.Root, testCase.DatasetIdsFile, Verbose=false);
+            testCase.verifyEqual(cert.complementarity.pairs_checked, 1);
+            testCase.verifyTrue(cert.complementarity.all_pass);
+            testCase.verifyEqual(cert.pairs(1).rel_asym, 0);
+
+            testCase.writePassingCertificate(ids(2), 2.002);
+            cert = validateCollection(testCase.Root, testCase.DatasetIdsFile, Verbose=false);
+            testCase.verifyFalse(cert.complementarity.all_pass);
+            testCase.verifyEqual(cert.pairs(1).rel_asym, 0.002 / 2.002, "RelTol", 1e-12);
+            testCase.verifyEqual(string(cert.result), "FAIL");
         end
 
         function passCertificateSkippedOnResume(testCase)
@@ -131,43 +156,41 @@ classdef validationTest < matlab.unittest.TestCase
             testCase.verifyTrue(any(contains(rep.reasons, "GENERATION MISMATCH")));
         end
 
-        function tamperedDatasetFailsCollection(testCase)
-            rd = fullfile(testCase.Root, testCase.DatasetId);
-            vcsv = fullfile(rd, "results", "mmb_" + testCase.DatasetId + "_vertices.csv");
-            V = readmatrix(vcsv, FileType="text");
-            V(3, :) = V(3, :) * 1.02;
-            fid = fopen(vcsv, "w"); fprintf(fid, "%.17g,%.17g,%.17g\n", V'); fclose(fid);
-            writelines(testCase.DatasetId, testCase.DatasetIdsFile);
-            cert = validateCollection(testCase.Root, testCase.DatasetIdsFile, Sample=8, Verbose=false);
-            testCase.verifyEqual(string(cert.result), "FAIL");
+    end
+
+    methods (Access = private)
+        function writePassingCertificate(testCase, datasetId, volume)
+            % A PASS certificate whose hashes match its files, which
+            % validateDataset reuses without checking the files again.
+            rd = fullfile(testCase.Root, datasetId);
+            results = fullfile(rd, "results");
+            if ~isfolder(results), mkdir(results); end
+            files = struct("generators", fullfile(rd, "generators_" + datasetId + ".txt"), ...
+                "vertices", fullfile(results, "mmb_" + datasetId + "_vertices.csv"), ...
+                "faces", fullfile(results, "mmb_" + datasetId + "_faces.csv"), ...
+                "summary", fullfile(results, "mmb_" + datasetId + "_summary.txt"));
+            sha = struct();
+            for f = string(fieldnames(files))'
+                writelines(datasetId + " " + f, files.(f));
+                sha.(f) = testCase.sha256OfFile(files.(f));
+            end
+            report = struct("schema", "mmb-dataset-report/2", "dataset_id", datasetId, ...
+                "result", "PASS", "sha256", sha, ...
+                "volume", struct("recomputed", volume), ...
+                "integrity", struct("csvRows", 0, "csvFaces", 0), ...
+                "provenance", struct("meta", struct("generators_payload_sha256", "")), ...
+                "lp", struct("feasible", 0, "sampled", 0));
+            writelines(string(jsonencode(report)), ...
+                fullfile(results, "mmb_" + datasetId + "_gate.json"));
         end
 
-        function currentCertificateReadsBack(testCase)
-            rd = fullfile(testCase.Root, testCase.DatasetId);
-            validateDataset(rd, Sample=8, Verbose=false);
-            gj = fullfile(rd, "results", "mmb_" + testCase.DatasetId + "_gate.json");
-            r = readValidationReport(gj);
-            testCase.verifyEqual(string(r.dataset_id), testCase.DatasetId);
-            testCase.verifyEqual(string(r.schema), "mmb-dataset-report/2");
-        end
-
-        function collectionCertificateReadsBack(testCase)
-            % The collection certificate this software writes must read back
-            % with the names docs/VALIDATION_FORMAT.md documents.
-            rd = fullfile(testCase.Root, testCase.DatasetId);
-            validateDataset(rd, Sample=8, Verbose=false);
-            writelines(testCase.DatasetId, testCase.DatasetIdsFile);
-            outDir = fullfile(testCase.Root, "gate_reports");
-            validateCollection(testCase.Root, testCase.DatasetIdsFile, ...
-                Sample=8, Verbose=false, OutDir=outDir);
-            cj = fullfile(outDir, "collection_certificate.json");
-            r = readValidationReport(cj);
-            testCase.verifyEqual(string(r.schema), "mmb-collection-certificate/1");
-            testCase.verifyEqual(r.datasets_expected, 1);
-            testCase.verifyEqual(r.datasets_pass, 1);
-            testCase.verifyEqual(r.datasets_fail, 0);
-            testCase.verifyEmpty(r.failing_datasets);
-            testCase.verifyEqual(strlength(string(r.dataset_ids_file_sha256)), 64);
+        function hex = sha256OfFile(~, path)
+            fid = fopen(path, "r");
+            bytes = fread(fid, Inf, "*uint8");
+            fclose(fid);
+            md = java.security.MessageDigest.getInstance("SHA-256");
+            md.update(bytes);
+            hex = lower(string(reshape(dec2hex(typecast(md.digest(), "uint8"))', 1, [])));
         end
     end
 end

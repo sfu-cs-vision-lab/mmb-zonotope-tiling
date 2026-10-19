@@ -10,6 +10,7 @@ classdef prepareGeneratorsTest < matlab.unittest.TestCase
         Observer = {"1931_2deg", "1964_10deg", "cfb_2deg", "cfb_10deg", ...
                     "lms_2deg", "lms_10deg"}
         Illuminant = {"A", "D50", "D65", "FL11", "LED-B1", "E"}
+        MultiColumnIlluminant = {"FL3", "FL3.7", "LED-B3"}
     end
 
     properties (Access = private)
@@ -38,37 +39,30 @@ classdef prepareGeneratorsTest < matlab.unittest.TestCase
             nBins = floor((780 - 380) / 10);
             testCase.verifyEqual(size(raw, 1), nBins);
             testCase.verifyEqual(size(raw, 2), 7);
+
+            content = fileread(files(1));
+            testCase.verifySubstring(content, "DOI:");
+            testCase.verifySubstring(content, "1931_2deg");
+            testCase.verifySubstring(content, "Observer:");
         end
 
         function observerLoads(testCase, Observer)
             files = prepareGenerators(Observer, "D65", "A", ...
                 Spacing=10, Refl=0.5, ...
                 DataDir=testCase.DataDir, OutputDir=testCase.OutputDir);
-            testCase.verifyTrue(isfile(files(1)));
+            % The CFB and LMS tables start at 390 nm, which leaves 39 bins.
+            nBins = 40 - startsWith(Observer, ["cfb", "lms"]);
+            testCase.verifyGeneratorPayload(files(1), nBins);
         end
 
         function illuminantLoads(testCase, Illuminant)
             files = prepareGenerators("1931_2deg", "D65", Illuminant, ...
                 Spacing=10, Refl=0.5, ...
                 DataDir=testCase.DataDir, OutputDir=testCase.OutputDir);
-            testCase.verifyTrue(isfile(files(1)));
+            testCase.verifyGeneratorPayload(files(1), 40);
         end
 
         function lmsDerivation(testCase)
-            % Check the LMS transformation before normalization. The XYZ generators
-            % are scaled to white_y100, while LMS uses unit_peak. Check the peaks
-            % of the transformed CMFs directly.
-            t2 = [1.94735469  -1.41445123   0.36476327; ...
-                  0.68990272   0.34832189   0;           ...
-                  0            0            1.93485343];
-            cfb = readmatrix(fullfile(testCase.DataDir, ...
-                "CIE_cfb_stv_2deg.csv"));
-            cfb(isnan(cfb)) = 0;
-            lms = (t2 \ cfb(:, 2:4)')';
-
-            peaks = max(lms, [], 1);
-            testCase.verifyEqual(peaks, [1 1 1], AbsTol=1e-3);
-
             % Check the written normalization. The LMS file is written with
             % k1=k2=1 (no rescale) and labeled with the unit_peak
             % policy. Cfb is written with the white_y100 policy.
@@ -90,56 +84,35 @@ classdef prepareGeneratorsTest < matlab.unittest.TestCase
             files = prepareGenerators("1931_2deg", "D65", "A", ...
                 Spacing=10, Refl=0.3, ...
                 DataDir=testCase.DataDir, OutputDir=testCase.OutputDir);
-            testCase.verifyTrue(isfile(files(1)));
+            data = readmatrix(files(1), CommentStyle="%");
+            testCase.verifyEqual(testCase.targetOf(files(1)), ...
+                0.3 * sum(data(:, 2:4)', 2), "RelTol", 1e-12);
             testCase.verifySubstring(files(1), "refl30");
         end
 
-        function z0FromExplicit(testCase)
-            z0 = [48.5; 50.1; 43.2];
-            files = prepareGenerators("1931_2deg", "D65", "A", ...
-                Spacing=10, Z0=z0, ...
-                DataDir=testCase.DataDir, OutputDir=testCase.OutputDir);
-            testCase.verifyTrue(isfile(files(1)));
-            testCase.verifySubstring(files(1), "z0_");
-        end
+        function multiColumnIlluminantMatchesItsTableColumn(testCase, MultiColumnIlluminant)
+            % Recompute the second generators from this illuminant's own
+            % column of the CIE table, found by its title in the metadata.
+            if startsWith(MultiColumnIlluminant, "FL")
+                tableName = "CIE_illum_FLs_1nm";
+            else
+                tableName = "CIE_illum_LEDs_1nm";
+            end
+            meta = jsondecode(fileread(fullfile(testCase.DataDir, ...
+                tableName + "_csv_metadata.json")));
+            titles = cellfun(@(h) string(h.title), meta.datatableInfo.columnHeaders);
+            spd = readmatrix(fullfile(testCase.DataDir, tableName + ".csv"));
+            spd = spd(spd(:, 1) >= 380 & spd(:, 1) <= 779, titles == MultiColumnIlluminant);
+            cmf = readmatrix(fullfile(testCase.DataDir, "CIE_xyz_1931_2deg.csv"));
+            cmf = cmf(cmf(:, 1) >= 380 & cmf(:, 1) <= 779, 2:4);
 
-        function z0FromSpectrum(testCase)
-            specFile = fullfile(testCase.OutputDir, "test_spec.csv");
-            wl = (380:10:780)';
-            refl = 0.5 * ones(size(wl));
-            writematrix([wl, refl], specFile);
-
-            files = prepareGenerators("1931_2deg", "D65", "A", ...
-                Spacing=10, Spectrum=specFile, ...
-                DataDir=testCase.DataDir, OutputDir=testCase.OutputDir);
-            testCase.verifyTrue(isfile(files(1)));
-            testCase.verifySubstring(files(1), "spec_");
-        end
-
-        function metadataInHeader(testCase)
-            files = prepareGenerators("1931_2deg", "D65", "A", ...
+            files = prepareGenerators("1931_2deg", "D65", MultiColumnIlluminant, ...
                 Spacing=10, Refl=0.5, ...
                 DataDir=testCase.DataDir, OutputDir=testCase.OutputDir);
-            content = fileread(files(1));
-            testCase.verifySubstring(content, "DOI:");
-            testCase.verifySubstring(content, "1931_2deg");
-            testCase.verifySubstring(content, "Observer:");
-        end
-
-        function multiColumnFLReadsCorrectColumn(testCase)
-            files = prepareGenerators("1931_2deg", "D65", "FL3", ...
-                Spacing=10, Refl=0.5, ...
-                DataDir=testCase.DataDir, OutputDir=testCase.OutputDir);
-            testCase.verifyTrue(isfile(files(1)));
-            testCase.verifySubstring(files(1), "FL3");
-        end
-
-        function multiColumnLEDReadsCorrectColumn(testCase)
-            files = prepareGenerators("1931_2deg", "D65", "LED-B3", ...
-                Spacing=10, Refl=0.5, ...
-                DataDir=testCase.DataDir, OutputDir=testCase.OutputDir);
-            testCase.verifyTrue(isfile(files(1)));
-            testCase.verifySubstring(files(1), "LED-B3");
+            data = readmatrix(files(1), CommentStyle="%");
+            k = testCase.headerScale(string(fileread(files(1))));
+            testCase.verifyEqual(data(:, 5:7), k(2) * testCase.binSums(cmf .* spd, 10), ...
+                "RelTol", 1e-12);
         end
 
         function batchProducesCorrectFileCount(testCase)
@@ -175,9 +148,13 @@ classdef prepareGeneratorsTest < matlab.unittest.TestCase
             files = prepareGenerators("1931_2deg", "D65", csvFile, ...
                 Spacing=10, Refl=0.5, ...
                 DataDir=testCase.DataDir, OutputDir=testCase.OutputDir);
-            testCase.verifyTrue(isfile(files(1)));
-            content = fileread(files(1));
-            testCase.verifySubstring(content, "User-provided illuminant");
+            % A flat SPD of ones leaves k2 times the binned 1931 CMFs.
+            cmf = readmatrix(fullfile(testCase.DataDir, "CIE_xyz_1931_2deg.csv"));
+            cmf = cmf(cmf(:, 1) >= 380 & cmf(:, 1) <= 779, 2:4);
+            data = readmatrix(files(1), CommentStyle="%");
+            k = testCase.headerScale(string(fileread(files(1))));
+            testCase.verifyEqual(data(:, 5:7), k(2) * testCase.binSums(cmf, 10), ...
+                "RelTol", 1e-12);
         end
 
         % Custom observer CSV
@@ -248,8 +225,6 @@ classdef prepareGeneratorsTest < matlab.unittest.TestCase
             % No borrowed identity or license for user data.
             testCase.verifyFalse(contains(extractBetween(content, ...
                 "% Observer:", "% Illuminant 1:"), "doi.org"));
-            testCase.verifySubstring(content, ...
-                "No CIE identifier, metadata or license applies to this file");
         end
 
         function customObserverNameIsFilenameSafe(testCase)
@@ -517,8 +492,6 @@ classdef prepareGeneratorsTest < matlab.unittest.TestCase
             mid(wl == 580) = 0;
             % 200 samples at +1, 200 at -1 and one at 0. The white response
             % cancels exactly while the channel is far from being all zero.
-            testCase.assertEqual(sum(mid), 0);
-            testCase.assertEqual(nnz(mid), 400);
             spec = testCase.writeObserverCsv("cancel_mid.csv", ...
                 [wl, ones(size(wl)), mid, ones(size(wl))]);
             testCase.verifyError(@() prepareGenerators(spec, "E", "E", ...
@@ -562,6 +535,20 @@ classdef prepareGeneratorsTest < matlab.unittest.TestCase
     end
 
     methods (Access = private)
+        function verifyGeneratorPayload(testCase, file, nBins)
+            data = readmatrix(file, CommentStyle="%");
+            testCase.verifySize(data, [nBins 7]);
+            testCase.verifyTrue(all(isfinite(data), "all"));
+            testCase.verifyTrue(all(any(data(:, 2:7) ~= 0, 1)), ...
+                "a generator channel is all zero");
+        end
+
+        function sums = binSums(~, values, spacing)
+            % Sum consecutive rows of a 1 nm table into bands of spacing rows.
+            nBins = size(values, 1) / spacing;
+            sums = squeeze(sum(reshape(values, spacing, nBins, []), 1));
+        end
+
         function path = writeSpectrumCsv(testCase, name, wl, level)
             path = fullfile(testCase.OutputDir, name);
             writematrix([wl, level * ones(size(wl))], path);

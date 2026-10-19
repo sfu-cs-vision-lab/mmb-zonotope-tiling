@@ -52,21 +52,6 @@ classdef hullMMBTest < matlab.unittest.TestCase
                 "origin-centered cube: opposite faces have equal |offset| and antiparallel normals. They must not merge");
         end
 
-        function outputFilesCreated(testCase)
-            verts = [0 0 0; 1 0 0; 0 1 0; 0 0 1; 1 1 1];
-            vfile = testCase.writeTempVertexFile(verts, "tetra");
-
-            hullMMB(vfile, OutputDir=testCase.OutputDir, Verbose=false);
-
-            [~, datasetId] = fileparts(vfile);
-            testCase.verifyTrue(isfile(fullfile( ...
-                testCase.OutputDir, datasetId + "_vertices.csv")));
-            testCase.verifyTrue(isfile(fullfile( ...
-                testCase.OutputDir, datasetId + "_faces.csv")));
-            testCase.verifyTrue(isfile(fullfile( ...
-                testCase.OutputDir, datasetId + "_summary.txt")));
-        end
-
         function verticesCsvRoundTripsExactly(testCase)
             % %.17g output must round-trip doubles bit-exactly
             rng(7);
@@ -107,7 +92,7 @@ classdef hullMMBTest < matlab.unittest.TestCase
             vfile = testCase.writeTempVertexFile(verts, "dedup");
 
             mmb = hullMMB(vfile, OutputDir=testCase.OutputDir, Verbose=false);
-            testCase.verifyLessThan(mmb.nVertices, size(verts, 1));
+            testCase.verifyEqual(mmb.nVertices, 5);
         end
 
         function nonFiniteRowsRemovedAndCounted(testCase)

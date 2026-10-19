@@ -1,10 +1,10 @@
 classdef validateAllMMBTest < matlab.unittest.TestCase
 % VALIDATEALLMMBTEST  Geometric validity tests over every dataset.
 %
-%   Parameterized version of validateMMBTest that runs the geometric checks
-%   against every dataset in runs_output/. Each dataset becomes a separate test
-%   instance with the same 5 verification methods, so a failure on one dataset
-%   does not block the others from running.
+%   Runs the geometric checks against every dataset in runs_output/. Each
+%   dataset becomes a separate test instance with the same 5 verification
+%   methods, so a failure on one dataset does not block the others from
+%   running.
 %
 %   The class discovers datasets from the output directory
 %   (default: ../runs_output relative to this test file, override via the

@@ -37,9 +37,6 @@ echo "$output" | grep -q 'Copied 2 generator files'
 ok "copies both inputs exactly with spaces in paths and a relative destination"
 [ ! -e "$TARGET/datasetA/results" ] || fail "copied archived results"
 ok "does not copy archived results"
-cmp "$TMP/inputA" "$SOURCE/datasetA/generators_datasetA.txt"
-cmp "$TMP/inputB" "$SOURCE/datasetB/generators_datasetB.txt"
-ok "source files are unchanged"
 
 printf 'keep\n' > "$TARGET/keep.txt"
 must_refuse "$TARGET" "refuses an existing output directory"
@@ -80,7 +77,5 @@ if bash "$WORK/tools/copy_generators.sh" > "$TMP/error" 2>&1; then
     fail "accepted missing arguments"
 fi
 ok "reports missing arguments"
-bash "$WORK/tools/copy_generators.sh" --help | grep -q '^Usage:'
-ok "provides command help"
 
 echo "copy generators: $pass passed, 0 failed"

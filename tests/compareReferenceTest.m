@@ -34,6 +34,28 @@ classdef compareReferenceTest < matlab.unittest.TestCase
             result = compareReference("volumes", testCase.Root, ...
                 testCase.RefCsv, Verbose=false);
         end
+        function [datasetId, ids, stored] = writeStoredInput(testCase)
+            datasetId = "1931_2deg_D65_A_10nm_refl50";
+            output = fullfile(testCase.Root, datasetId);
+            mkdir(output);
+            prepareGenerators("1931_2deg", "D65", "A", OutputDir=output);
+            stored = fullfile(output, "generators_" + datasetId + ".txt");
+            ids = fullfile(testCase.Root, "dataset_ids.txt");
+            writelines(datasetId, ids);
+        end
+        function changeDigit(~, file, digit)
+            % Change one mantissa digit of the first generator value in the
+            % payload. Digit 1 is the leading digit and 16 the last printed one.
+            lines = readlines(file);
+            k = find(startsWith(lines, "% payload_sha256="), 1) + 3;
+            fields = split(lines(k));
+            m = char(fields(2));
+            pos = digit + (digit > 1);
+            m(pos) = char('0' + mod(m(pos) - '0' + 1, 10));
+            fields(2) = string(m);
+            lines(k) = join(fields, " ");
+            writelines(lines, file);
+        end
     end
 
     methods (Test)
@@ -45,18 +67,13 @@ classdef compareReferenceTest < matlab.unittest.TestCase
             testCase.verifyTrue(r.pass);
             testCase.verifyEqual(r.matched, 2);
         end
-        function largerVolumeFails(testCase)
-            testCase.writeReference("a,100");
+        function largeDifferencesFailInBothDirections(testCase)
+            testCase.writeReference(["a,100"; "b,100"]);
             testCase.writeCertificate("a", 100.001);
+            testCase.writeCertificate("b", 99.999);
             r = testCase.compare();
             testCase.verifyFalse(r.pass);
-            testCase.verifyEqual(numel(r.failures), 1);
-        end
-        function smallerVolumeFails(testCase)
-            testCase.writeReference("a,100");
-            testCase.writeCertificate("a", 99.999);
-            r = testCase.compare();
-            testCase.verifyFalse(r.pass);
+            testCase.verifyEqual(numel(r.failures), 2);
         end
         function smallDifferencesPassInBothDirections(testCase)
             testCase.writeReference(["a,100"; "b,100"]);
@@ -91,15 +108,28 @@ classdef compareReferenceTest < matlab.unittest.TestCase
             testCase.verifyFalse(r.pass);
         end
         function regeneratedInputMatchesItsReference(testCase)
-            datasetId = "1931_2deg_D65_A_10nm_refl50";
-            output = fullfile(testCase.Root, datasetId);
-            mkdir(output);
-            prepareGenerators("1931_2deg", "D65", "A", OutputDir=output);
-            ids = fullfile(testCase.Root, "dataset_ids.txt");
-            writelines(datasetId, ids);
+            [~, ids] = testCase.writeStoredInput();
             r = compareReference("inputs", testCase.Root, ids, Verbose=false);
             testCase.verifyTrue(r.pass);
             testCase.verifyEqual(r.bitIdentical, 1);
+        end
+        function inputChangeInLeadingDigitIsDivergent(testCase)
+            [datasetId, ids, stored] = testCase.writeStoredInput();
+            testCase.changeDigit(stored, 1);
+            r = compareReference("inputs", testCase.Root, ids, Verbose=false);
+            testCase.verifyFalse(r.pass);
+            testCase.verifyEqual(r.mismatched, datasetId);
+            testCase.verifyEqual(r.divergent, datasetId);
+            testCase.verifyEmpty(r.lsbOnly);
+        end
+        function inputChangeInLastPlaceIsLsbOnly(testCase)
+            [datasetId, ids, stored] = testCase.writeStoredInput();
+            testCase.changeDigit(stored, 16);
+            r = compareReference("inputs", testCase.Root, ids, Verbose=false);
+            testCase.verifyFalse(r.pass);
+            testCase.verifyEqual(r.mismatched, datasetId);
+            testCase.verifyEqual(r.lsbOnly, datasetId);
+            testCase.verifyEmpty(r.divergent);
         end
         function missingInputFails(testCase)
             mkdir(testCase.Root);

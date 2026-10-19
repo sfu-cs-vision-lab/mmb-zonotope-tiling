@@ -50,9 +50,8 @@ expect_pass "explicit expectations verify" bash "$VC" "$TMP/mmb_${S}_chunk3.txt"
 
 # Truncation: drop the last data row + footer (kill/quota signature)
 make_chunk "$TMP/t.txt" "$S" 3 7 5 yes
-head -n 9 "$TMP/t.txt" > "$TMP/mmb_${S}_chunk4.txt"   # header(6) + 3 rows, header says 5
-mv "$TMP/mmb_${S}_chunk4.txt" "$TMP/trunc/mmb_${S}_chunk3.txt" 2>/dev/null || {
-    mkdir -p "$TMP/trunc"; head -n 9 "$TMP/t.txt" > "$TMP/trunc/mmb_${S}_chunk3.txt"; }
+mkdir -p "$TMP/trunc"
+head -n 9 "$TMP/t.txt" > "$TMP/trunc/mmb_${S}_chunk3.txt"   # header(6) + 3 rows, header says 5
 expect_fail "truncated rows rejected (count vs header)" bash "$VC" "$TMP/trunc/mmb_${S}_chunk3.txt"
 
 # Partial trailing line (quota mid-row)

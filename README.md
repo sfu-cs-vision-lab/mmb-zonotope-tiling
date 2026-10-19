@@ -521,9 +521,9 @@ for t in tests/shell/*.sh; do bash "$t"; done
 `tests/hpc/test_interruption.sh` perform real GPU computations. Their required
 node types are listed above. See [HPC_GUIDE.md](docs/HPC_GUIDE.md) for the commands.
 
-The MATLAB unit tests use the repository's supplied test data. `validateMMBTest` and
-`validateAllMMBTest` check completed results and skip themselves when no
-output is present.
+The MATLAB unit tests use the repository's supplied test data.
+`validateAllMMBTest` checks completed results and skips itself when no output
+is present.
 
 The MATLAB releases and computing environments tested are recorded in
 `TESTING.json` in the code archive, together with the compiler, CUDA
