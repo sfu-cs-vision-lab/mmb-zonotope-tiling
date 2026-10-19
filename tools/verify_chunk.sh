@@ -12,7 +12,7 @@
 #
 # Usage:
 #   verify_chunk.sh <file> [--dataset-id DATASET_ID] [--chunk K] [--nchunks N]
-#                   [--require-footer] [--generators PATH] [--quiet]
+#                   [--require-footer] [--generators PATH]
 #
 #   --dataset-id DATASET_ID       expected dataset_id. Default: derived from the filename
 #   --chunk K         expected chunk index. Default: derived from filename
@@ -38,7 +38,6 @@ EXP_CHUNK=""
 EXP_NCHUNKS=""
 REQUIRE_FOOTER=false
 COLORDATA=""
-QUIET=false
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -47,7 +46,6 @@ while [ $# -gt 0 ]; do
         --nchunks)        EXP_NCHUNKS=$2; shift 2 ;;
         --require-footer) REQUIRE_FOOTER=true; shift ;;
         --generators)      COLORDATA=$2; shift 2 ;;
-        --quiet)          QUIET=true; shift ;;
         -*)               echo "verify_chunk: unknown option $1" >&2; exit 2 ;;
         *)                FILE=$1; shift ;;
     esac
@@ -219,5 +217,5 @@ if [ -n "$COLORDATA" ]; then
     fi
 fi
 
-$QUIET || echo "verify_chunk OK [$base]: dataset_id=$EXP_DATASET_ID${name_chunk:+ chunk=$name_chunk/$hdr_nchunks} vertices=$rows footer=$([ "$footer_v" -ge 0 ] && echo yes || echo no)"
+echo "verify_chunk OK [$base]: dataset_id=$EXP_DATASET_ID${name_chunk:+ chunk=$name_chunk/$hdr_nchunks} vertices=$rows footer=$([ "$footer_v" -ge 0 ] && echo yes || echo no)"
 exit 0

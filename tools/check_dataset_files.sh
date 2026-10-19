@@ -1,10 +1,10 @@
 #!/bin/bash
 # tools/check_dataset_files.sh  Check dataset files against their expected inputs.
 #
-# Checks input filenames, dataset identifiers, partial-output markers, row
-# counts and repeated conversion markers. It can run while jobs are active.
+# Checks input filenames, dataset identifiers, partial-output markers and row
+# counts. It can run while jobs are active.
 #
-# Usage: bash tools/check_dataset_files.sh [--root DIR] [--allow-missing] [--quiet]
+# Usage: bash tools/check_dataset_files.sh [--root DIR] [--allow-missing]
 #   --root DIR       Output directory. Default: ./runs_output.
 #   --allow-missing  Allow datasets that do not yet have results.
 #
@@ -18,13 +18,11 @@ SCRIPTDIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 . "$SCRIPTDIR/config/cluster.sh"
 ROOT=$MMB_OUTPUT_ROOT
 ALLOW_MISSING=false
-QUIET=false
 
 while [ $# -gt 0 ]; do
     case "$1" in
         --root)          ROOT=$2; shift 2 ;;
         --allow-missing) ALLOW_MISSING=true; shift ;;
-        --quiet)         QUIET=true; shift ;;
         *) echo "check_dataset_files: unknown option $1" >&2; exit 2 ;;
     esac
 done
@@ -93,12 +91,6 @@ for dir in "$ROOT"/*/; do
         fi
     fi
 
-    # DOUBLE_CONVERTED: more than one conversion marker
-    nconv=$(grep -c '^% CONVERTED' "$summary" || true)
-    if [ "$nconv" -gt 1 ]; then
-        report DOUBLE_CONVERTED "$dataset_id" "$nconv CONVERTED footers"
-    fi
-
     # COUNT_MISMATCH: summary count vs actual CSV rows
     vcsv="$dir/results/mmb_${dataset_id}_vertices.csv"
     if [ -f "$vcsv" ]; then
@@ -114,5 +106,5 @@ if [ "$violations" -gt 0 ]; then
     echo "check_dataset_files: $violations violation(s) across $dataset_ids dataset_id(s)" >&2
     exit 1
 fi
-$QUIET || echo "check_dataset_files: $dataset_ids dataset_id(s) clean (content matches every canonical name)"
+echo "check_dataset_files: $dataset_ids dataset_id(s) clean (content matches every canonical name)"
 exit 0

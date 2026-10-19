@@ -854,8 +854,6 @@ for datafile in "$PREPDIR"/generators_*.txt; do
     if $FORCE_PREP || [ ! -f "$RUNDIR/generators_${dataset_id}.txt" ] || \
        ! grep -q '^% payload_sha256=' "$RUNDIR/generators_${dataset_id}.txt"; then
         mv -f "$datafile" "$RUNDIR/generators_${dataset_id}.txt"
-        # Remove the alternate input filename so the directory contains one input.
-        rm -f "$RUNDIR/colordata_${dataset_id}.txt"
     else
         rm -f "$datafile"
     fi

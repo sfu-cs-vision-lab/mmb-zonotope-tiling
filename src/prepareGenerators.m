@@ -4,7 +4,7 @@ function files = prepareGenerators(observer, illum1s, illum2s, options)
 %   files = prepareGenerators(observer, illum1, illum2) generates a text file
 %   containing the 6xn generator matrix for computing the exact metamer
 %   mismatch body between two illuminants. Reads CIE CSV data and companion
-%   JSON metadata files directly. No hardcoded DOIs or descriptions.
+%   JSON metadata files directly.
 %
 %   INPUTS:
 %       observer   Observer short name (string). One of:
@@ -200,7 +200,6 @@ for si = 1:nSpacings
             i1, i2, sp, z0Tag, nBins, nBins, nchoosek(nBins, 6), fname);
     end
 end
-files = files(1:fileIdx);
 fprintf("\n%d file(s) written to %s/\n", fileIdx, options.OutputDir);
 end
 
@@ -709,9 +708,6 @@ function writeOutput(outpath, nBins, z0, g1, g2, wlBins, spacing, z0Desc, ...
         case "as_supplied"
             fprintf(fid, "%% Normalization: k1=%.15e, k2=%.15e (as_supplied: user channel values kept unchanged, no white anchor)\n", ...
                 k1, k2);
-        otherwise
-            fprintf(fid, "%% Normalization: k1=%.15e, k2=%.15e (policy=%s, channel=%d)\n", ...
-                k1, k2, normPolicy, normChannel);
     end
     fprintf(fid, "%%\n");
     fprintf(fid, "%% Integration: rectangular (sum of 1nm generators per bin)\n");

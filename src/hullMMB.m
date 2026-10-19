@@ -165,7 +165,6 @@ for gi = 1:nGroups
         expected = 0:(N-1);
         if numel(idxSorted) ~= N || any(idxSorted ~= expected)
             missing = setdiff(expected, chunkIdx);
-            dupes = chunkIdx(logical([0, diff(idxSorted) == 0])); %#ok<NASGU>
             msg = sprintf("Group '%s': chunk set incomplete, %d of %d present (missing: %s).", ...
                 datasetId, numel(unique(chunkIdx)), N, join(string(missing), ","));
             if options.AllowPartial
